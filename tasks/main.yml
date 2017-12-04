@@ -1,0 +1,89 @@
+---
+# heavily inspired by https://gist.github.com/lachesis/943769f3fac740d5848352752ac08741
+- name: Create ACME.sh user
+  become: yes
+  user:
+      name: '{{ acme_user }}'
+      home: '{{ acme_home_dir }}'
+      state: present
+
+- name: "Tighten permissions on ACME homedir"
+  become: yes
+  file:
+    path: '{{ acme_home_dir }}'
+    mode: '0755'        # default value '0700'
+
+- name: "Create ACME pki dir"
+  become: yes
+  file:
+    dest: '{{ acme_pki_dir }}'
+    owner: '{{ acme_pki_dir_owner }}'
+    group: '{{ acme_pki_dir_group }}'
+    mode: '{{ acme_pki_dir_permissions }}'
+    state: directory
+
+- name: "Create ACME well-known dir"
+  become: yes
+  file:
+    dest: '{{ acme_well_known_dir }}'
+    owner: '{{ acme_well_known_dir_owner }}'
+    group: '{{ acme_well_known_dir_group }}'
+    mode: '{{ acme_well_known_dir_permissions }}'
+    state: directory
+
+- name: "Download acme.sh from the wild GitHub"
+  become: yes
+  get_url:
+    url: "{{ acme_script_url }}"
+    dest: '{{ acme_script }}'
+    mode: '0755'
+
+# - name: "Tighten permissions on ACME homedir"
+#   become: yes
+#   file:
+#     path: '{{ acme_home_dir }}'
+#     mode: '0700'
+
+- name: "Make acme.sh accessible in {{ acme_symlink_to_local }}"
+  become: yes
+  file:
+    src: "{{ acme_script }}"
+    dest: "{{ acme_symlink_to_local }}"
+    state: link
+  when: acme_symlink_to_local is defined
+
+- name: Make sure socat is present (for standalone mode)
+  yum:
+     name: socat
+     state: present
+  when:
+    - ansible_os_family == "RedHat"
+    - acme_standalone_mode_required
+
+- name: "Enable sudo reload nginx by letsencrypt"
+  become: yes
+  template:
+    src: letsencrypt-restart-nginx.j2
+    dest: /etc/sudoers.d/20-letsencrypt-nginx-restart
+  when: acme_sudo_reload_nginx
+
+- name: "Enable sudo reload haproxy by letsencrypt"
+  become: yes
+  template:
+    src: letsencrypt-restart-haproxy.j2
+    dest: /etc/sudoers.d/20-letsencrypt-haproxy-restart
+  when: acme_sudo_reload_haproxy
+
+- name: "Enable sudo reload httpd by letsencrypt"
+  become: yes
+  template:
+    src: letsencrypt-restart-httpd.j2
+    dest: /etc/sudoers.d/20-letsencrypt-httpd-restart
+  when: acme_sudo_reload_httpd
+
+#- name: "Install .acme.sh"
+#  become_user: '{{ acme_user }}'
+#  become: yes
+#  shell: 'acme.sh --install --home {{ acme_data_dir }}'
+#  args:
+#    creates: '{{ acme_data_dir }}/.acme.sh'
